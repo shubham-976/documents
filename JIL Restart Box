@@ -1,0 +1,119 @@
+To implement the behavior where each job runs **irrespective of whether the previous job finishes successfully or not**, with a 30-second delay between each, we can use the `sleep` command for the delay and omit any job dependencies based on the success/failure of previous jobs. Each job will start after a fixed delay (30 seconds), without waiting for the previous one to finish.
+
+Here's the JIL code that achieves this:
+
+### Systematic JIL Code (with 30-second delay between each job, regardless of job outcomes):
+
+```jil
+/* Definition of the Restart Box */
+insert_job: 1VAS_UAT_FX_Restart_BOX
+job_type: b
+owner: your_user_id
+permission: gx,ge
+description: "Box to restart VAS FX Snapshot services with 30-second delays between each job, regardless of job success or failure"
+date_conditions: 0
+alarm_if_fail: 1
+
+/* Job 1: Restart VAS_FX_Svc_SNAPSHOT_Pricer_prod */
+insert_job: Restart_SNAPSHOT_Pricer
+job_type: c
+box_name: 1VAS_UAT_FX_Restart_BOX
+command: ser -d VAS_FX_Svc_SNAPSHOT_Pricer_prod
+owner: your_user_id
+permission: gx,ge
+description: "Stops VAS_FX_Svc_SNAPSHOT_Pricer_prod service"
+date_conditions: 0
+alarm_if_fail: 1
+
+/* Delay after Job 1 (30 seconds) */
+insert_job: Delay_After_SNAPSHOT_Pricer
+job_type: c
+box_name: 1VAS_UAT_FX_Restart_BOX
+command: sleep 30
+owner: your_user_id
+permission: gx,ge
+description: "30-second delay after Restart_SNAPSHOT_Pricer"
+date_conditions: 0
+alarm_if_fail: 1
+condition: d(Restart_SNAPSHOT_Pricer)  /* 'd' allows job to run regardless of success/failure */
+
+/* Job 2: Restart 1VAS_FX_Svc_Snapshot_WorkerNode_prod */
+insert_job: Restart_WorkerNode
+job_type: c
+box_name: 1VAS_UAT_FX_Restart_BOX
+command: ser -d 1VAS_FX_Svc_Snapshot_WorkerNode_prod
+owner: your_user_id
+permission: gx,ge
+description: "Stops 1VAS_FX_Svc_Snapshot_WorkerNode_prod service"
+date_conditions: 0
+alarm_if_fail: 1
+condition: d(Delay_After_SNAPSHOT_Pricer)  /* 'd' allows job to run regardless of success/failure */
+
+/* Delay after Job 2 (30 seconds) */
+insert_job: Delay_After_WorkerNode
+job_type: c
+box_name: 1VAS_UAT_FX_Restart_BOX
+command: sleep 30
+owner: your_user_id
+permission: gx,ge
+description: "30-second delay after Restart_WorkerNode"
+date_conditions: 0
+alarm_if_fail: 1
+condition: d(Restart_WorkerNode)  /* 'd' allows job to run regardless of success/failure */
+
+/* Job 3: Restart 1VAS_FX_Svc_Snapshot_ID_Generator_prod */
+insert_job: Restart_ID_Generator
+job_type: c
+box_name: 1VAS_UAT_FX_Restart_BOX
+command: ser -d 1VAS_FX_Svc_Snapshot_ID_Generator_prod
+owner: your_user_id
+permission: gx,ge
+description: "Stops 1VAS_FX_Svc_Snapshot_ID_Generator_prod service"
+date_conditions: 0
+alarm_if_fail: 1
+condition: d(Delay_After_WorkerNode)  /* 'd' allows job to run regardless of success/failure */
+```
+
+---
+
+### Explanation of Key Points:
+1. **`condition: d(JobName)`**:
+   - The `d` condition stands for **done**, which means the job will run **regardless** of whether the specified job (`JobName`) finishes successfully or fails. This ensures that each job runs without waiting for the success of the previous one.
+   - For example:
+     ```jil
+     condition: d(Restart_SNAPSHOT_Pricer)
+     ```
+     This allows `Delay_After_SNAPSHOT_Pricer` to run **after `Restart_SNAPSHOT_Pricer` finishes**, irrespective of whether `Restart_SNAPSHOT_Pricer` succeeds or fails.
+
+2. **30-Second Delays**:
+   - After each job (e.g., `Restart_SNAPSHOT_Pricer`), a delay job (`Delay_After_SNAPSHOT_Pricer`) is added to wait for 30 seconds (`sleep 30`).
+   - The next job will execute after the delay, irrespective of the previous job's success or failure.
+
+3. **No Job Dependencies Based on Success**:
+   - Using `d(JobName)` for each `condition` ensures that the jobs will run regardless of the success or failure of the previous job.
+
+4. **Sequential Execution with Delays**:
+   - Job 1 (`Restart_SNAPSHOT_Pricer`) starts first.
+   - After Job 1 finishes (no matter the outcome), Job 2 (`Restart_WorkerNode`) starts after a 30-second delay.
+   - After Job 2 finishes (no matter the outcome), Job 3 (`Restart_ID_Generator`) starts after another 30-second delay.
+
+---
+
+### How to Use:
+1. Save the script in a file (e.g., `restart_box_with_delays_irrespective.jil`).
+2. Load it into Autosys:
+   ```bash
+   jil < restart_box_with_delays_irrespective.jil
+   ```
+3. Verify the jobs and dependencies:
+   ```bash
+   autorep -J 1VAS_UAT_FX_Restart_BOX -q
+   ```
+4. Test the box:
+   ```bash
+   sendevent -E FORCE_STARTJOB -J 1VAS_UAT_FX_Restart_BOX
+   ```
+
+---
+
+This configuration ensures that each job starts after the previous one (or its delay) completes, irrespective of whether the previous job succeeded or failed, with a 30-second delay between each job. Let me know if you need any adjustments!
